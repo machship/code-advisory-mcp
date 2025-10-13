@@ -126,6 +126,20 @@ The builder is idempotent. Add new documents to your manifest and re-run:
 
 Existing chunks are skipped, only new content generates embeddings.
 
+#### 4. Query and Test (Optional)
+
+Test your database with the query tool:
+
+```bash
+# Build query tool
+go build -o bin/query-advisory-db ./cmd/query
+
+# Query the database
+./bin/query-advisory-db --query "error handling best practices"
+```
+
+See [QUERY_TOOL.md](QUERY_TOOL.md) for detailed usage.
+
 ### How It Works
 
 #### Contextual Retrieval Chunking Strategy
