@@ -6,12 +6,12 @@ import (
 
 func TestChunkDocument(t *testing.T) {
 	tests := map[string]struct {
-		content     string
-		baseURL     string
-		sourcePath  string
-		metadata    map[string]string
-		wantChunks  int
-		checkFirst  func(*testing.T, Chunk)
+		content    string
+		baseURL    string
+		sourcePath string
+		metadata   map[string]string
+		wantChunks int
+		checkFirst func(*testing.T, Chunk)
 	}{
 		"basic H2 and H3": {
 			content: `# Title
@@ -145,13 +145,13 @@ func TestSlugify(t *testing.T) {
 		input string
 		want  string
 	}{
-		"simple":            {input: "Error Wrapping", want: "error-wrapping"},
-		"special chars":     {input: "Error: Handling?", want: "error-handling"},
-		"underscores":       {input: "Test_Function_Name", want: "test-function-name"},
-		"multiple spaces":   {input: "Multiple   Spaces", want: "multiple-spaces"},
-		"leading trailing":  {input: "  Trim Me  ", want: "trim-me"},
-		"multiple hyphens":  {input: "Already--Has---Hyphens", want: "already-has-hyphens"},
-		"mixed":             {input: "Go 1.21+ Features!", want: "go-121-features"},
+		"simple":           {input: "Error Wrapping", want: "error-wrapping"},
+		"special chars":    {input: "Error: Handling?", want: "error-handling"},
+		"underscores":      {input: "Test_Function_Name", want: "test-function-name"},
+		"multiple spaces":  {input: "Multiple   Spaces", want: "multiple-spaces"},
+		"leading trailing": {input: "  Trim Me  ", want: "trim-me"},
+		"multiple hyphens": {input: "Already--Has---Hyphens", want: "already-has-hyphens"},
+		"mixed":            {input: "Go 1.21+ Features!", want: "go-121-features"},
 	}
 
 	for name, tc := range tests {

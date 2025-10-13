@@ -85,7 +85,11 @@ func run(cfg config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("Warning: failed to close database: %v", err)
+		}
+	}()
 
 	// Process each document
 	totalChunks := 0
