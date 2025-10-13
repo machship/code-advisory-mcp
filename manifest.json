@@ -1,0 +1,44 @@
+{
+  "documents": [
+    {
+      "path": "resources/Effective-Go.md",
+      "uri": "https://go.dev/doc/effective_go",
+      "metadata": {
+        "language": "Go",
+        "category": "best-practices",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/CodeReviewComments.md",
+      "uri": "https://go.dev/wiki/CodeReviewComments",
+      "metadata": {
+        "language": "Go",
+        "category": "code-review",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/TestComments.md",
+      "uri": "https://go.dev/wiki/TestComments",
+      "metadata": {
+        "language": "Go",
+        "category": "testing",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/Go-Coding-Style-Guide.md",
+      "uri": "https://google.github.io/styleguide/go",
+      "metadata": {
+        "language": "Go",
+        "category": "style-guide",
+        "version": "1.0",
+        "author": "Google"
+      }
+    }
+  ]
+}
