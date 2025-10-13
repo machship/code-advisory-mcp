@@ -111,8 +111,9 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 func extractText(heading *ast.Heading, source []byte) string {
 	var buf bytes.Buffer
 	for child := heading.FirstChild(); child != nil; child = child.NextSibling() {
-		segment := child.Text(source)
-		buf.Write(segment)
+		if textNode, ok := child.(*ast.Text); ok {
+			buf.Write(textNode.Segment.Value(source))
+		}
 	}
 	return buf.String()
 }

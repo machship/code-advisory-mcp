@@ -8,10 +8,10 @@ import (
 
 func TestLoad(t *testing.T) {
 	tests := map[string]struct {
-		content     string
-		wantErr     bool
-		wantDocs    int
-		checkFirst  func(*testing.T, Document)
+		content    string
+		wantErr    bool
+		wantDocs   int
+		checkFirst func(*testing.T, Document)
 	}{
 		"valid manifest": {
 			content: `{
