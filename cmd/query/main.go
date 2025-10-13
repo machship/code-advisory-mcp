@@ -22,6 +22,7 @@ type config struct {
 	azureKey      string
 	ollamaBaseURL string
 	model         string
+	previewLen    int
 }
 
 func main() {
@@ -43,6 +44,7 @@ func parseFlags() config {
 	flag.StringVar(&cfg.azureKey, "azure-key", getEnv("AZURE_OPENAI_KEY", ""), "Azure OpenAI API key")
 	flag.StringVar(&cfg.ollamaBaseURL, "ollama-url", getEnv("OLLAMA_BASE_URL", "http://localhost:11434/api"), "Ollama base URL")
 	flag.StringVar(&cfg.model, "model", getEnv("EMBEDDING_MODEL", "nomic-embed-text"), "Embedding model name")
+	flag.IntVar(&cfg.previewLen, "p", 400, "Length of the preview to display")
 
 	flag.Parse()
 
@@ -129,7 +131,7 @@ func run(cfg config) error {
 		fmt.Printf("URL: %s\n", result.Metadata["url"])
 		fmt.Printf("Source: %s\n", result.Metadata["source_file"])
 		fmt.Printf("Section: %s > %s\n", result.Metadata["h2_heading"], result.Metadata["h3_heading"])
-		fmt.Printf("\nContent Preview:\n%s\n", truncate(result.Content, 400))
+		fmt.Printf("\nContent Preview:\n%s\n", truncate(result.Content, cfg.previewLen))
 
 		if i < len(results)-1 {
 			fmt.Println()
@@ -142,8 +144,8 @@ func run(cfg config) error {
 }
 
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if maxLen == 0 || len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	return s[:maxLen-3] + "..."
 }
