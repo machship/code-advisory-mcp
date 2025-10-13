@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github/machship/code-advisory-mcp/internal/chunker"
 	"github/machship/code-advisory-mcp/internal/database"
@@ -17,8 +18,10 @@ import (
 type config struct {
 	manifestFile   string
 	outputFile     string
+	backend        string
 	azureEndpoint  string
 	azureKey       string
+	ollamaBaseURL  string
 	embeddingModel string
 }
 
@@ -35,8 +38,10 @@ func parseFlags() config {
 
 	flag.StringVar(&cfg.manifestFile, "manifest", getEnv("MANIFEST_FILE", ""), "Path to JSON manifest file (required)")
 	flag.StringVar(&cfg.outputFile, "output", getEnv("OUTPUT_FILE", "advisory.db"), "Database output path")
-	flag.StringVar(&cfg.azureEndpoint, "azure-endpoint", getEnv("AZURE_OPENAI_ENDPOINT", ""), "Azure OpenAI endpoint")
-	flag.StringVar(&cfg.azureKey, "azure-key", getEnv("AZURE_OPENAI_KEY", ""), "Azure OpenAI API key")
+	flag.StringVar(&cfg.backend, "backend", getEnv("EMBEDDING_BACKEND", "azure"), "Embedding backend: azure or ollama")
+	flag.StringVar(&cfg.azureEndpoint, "azure-endpoint", getEnv("AZURE_OPENAI_ENDPOINT", ""), "Azure OpenAI endpoint (required for azure backend)")
+	flag.StringVar(&cfg.azureKey, "azure-key", getEnv("AZURE_OPENAI_KEY", ""), "Azure OpenAI API key (required for azure backend)")
+	flag.StringVar(&cfg.ollamaBaseURL, "ollama-url", getEnv("OLLAMA_BASE_URL", "http://localhost:11434/api"), "Ollama base URL (for ollama backend)")
 	flag.StringVar(&cfg.embeddingModel, "model", getEnv("EMBEDDING_MODEL", "text-embedding-3-small"), "Embedding model name")
 
 	flag.Parse()
@@ -44,11 +49,25 @@ func parseFlags() config {
 	if cfg.manifestFile == "" {
 		log.Fatal("manifest file is required")
 	}
-	if cfg.azureEndpoint == "" {
-		log.Fatal("azure-endpoint is required")
-	}
-	if cfg.azureKey == "" {
-		log.Fatal("azure-key is required")
+
+	// Normalize backend
+	cfg.backend = strings.ToLower(cfg.backend)
+
+	// Validate backend-specific requirements
+	switch cfg.backend {
+	case "azure":
+		if cfg.azureEndpoint == "" {
+			log.Fatal("azure-endpoint is required for azure backend")
+		}
+		if cfg.azureKey == "" {
+			log.Fatal("azure-key is required for azure backend")
+		}
+	case "ollama":
+		if cfg.embeddingModel == "" {
+			log.Fatal("model is required for ollama backend")
+		}
+	default:
+		log.Fatalf("unsupported backend: %s (use 'azure' or 'ollama')", cfg.backend)
 	}
 
 	return cfg
@@ -73,8 +92,25 @@ func run(cfg config) error {
 	log.Printf("Loaded manifest with %d documents", len(m.Documents))
 
 	// Initialize embedder
-	log.Printf("Initializing embedder with model %s", cfg.embeddingModel)
-	emb, err := embedder.New(cfg.azureEndpoint, cfg.azureKey, cfg.embeddingModel)
+	log.Printf("Initializing %s embedder with model %s", cfg.backend, cfg.embeddingModel)
+
+	var backend embedder.Backend
+	switch cfg.backend {
+	case "azure":
+		backend = embedder.BackendAzureOpenAI
+	case "ollama":
+		backend = embedder.BackendOllama
+	default:
+		return fmt.Errorf("unsupported backend: %s", cfg.backend)
+	}
+
+	emb, err := embedder.New(embedder.Config{
+		Backend:       backend,
+		Endpoint:      cfg.azureEndpoint,
+		APIKey:        cfg.azureKey,
+		Model:         cfg.embeddingModel,
+		OllamaBaseURL: cfg.ollamaBaseURL,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create embedder: %w", err)
 	}
