@@ -8,11 +8,29 @@ This project implements a vector search system for coding standards documentatio
 
 ## Features
 
+- **Multiple Backends**: Support for both Azure OpenAI and local Ollama embeddings
 - **Contextual Chunking**: Smart markdown parsing that preserves document structure and context
 - **Idempotent Processing**: Skip already-embedded content to save API calls
 - **Portable Database**: Single-file database that can be embedded in binaries
 - **Deep-Linked Results**: Automatic URL fragment generation for precise documentation navigation
-- **Azure OpenAI Integration**: Uses text-embedding-3-small for high-quality embeddings
+- **No Cloud Required**: Use Ollama for completely local, private embeddings
+
+## Quick Start with Ollama (No API Keys Needed!)
+
+The fastest way to get started is with Ollama, which runs completely locally:
+
+```bash
+# 1. Install Ollama (if not already installed)
+# Visit https://ollama.ai or use: brew install ollama
+
+# 2. Pull an embedding model
+ollama pull nomic-embed-text
+
+# 3. Run the demo script
+./demo-ollama.sh
+```
+
+That's it! You now have a working advisory database with 80 chunks from Go documentation.
 
 ## Phase 1: Database Builder (Complete)
 
@@ -56,8 +74,21 @@ Create a JSON manifest listing your markdown documents:
 
 #### 2. Run the Builder
 
+**With Ollama (Local, No API Keys):**
+
 ```bash
 ./bin/build-advisory-db \
+  --backend ollama \
+  --model nomic-embed-text \
+  --manifest manifest.json \
+  --output advisory.db
+```
+
+**With Azure OpenAI:**
+
+```bash
+./bin/build-advisory-db \
+  --backend azure \
   --manifest manifest.json \
   --output advisory.db \
   --azure-endpoint https://your-resource.openai.azure.com \
@@ -68,11 +99,19 @@ Create a JSON manifest listing your markdown documents:
 Or using environment variables:
 
 ```bash
-export MANIFEST_FILE=manifest.json
-export OUTPUT_FILE=advisory.db
+# For Ollama
+export EMBEDDING_BACKEND=ollama
+export EMBEDDING_MODEL=nomic-embed-text
+
+# For Azure OpenAI
+export EMBEDDING_BACKEND=azure
 export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 export AZURE_OPENAI_KEY=your-api-key
 export EMBEDDING_MODEL=text-embedding-3-small
+
+# Common
+export MANIFEST_FILE=manifest.json
+export OUTPUT_FILE=advisory.db
 
 ./bin/build-advisory-db
 ```
@@ -172,9 +211,15 @@ go test ./internal/chunker -v
 |------|---------------------|---------|-------------|
 | `--manifest` | `MANIFEST_FILE` | *(required)* | Path to JSON manifest file |
 | `--output` | `OUTPUT_FILE` | `advisory.db` | Database output path |
-| `--azure-endpoint` | `AZURE_OPENAI_ENDPOINT` | *(required)* | Azure OpenAI endpoint URL |
-| `--azure-key` | `AZURE_OPENAI_KEY` | *(required)* | Azure OpenAI API key |
+| `--backend` | `EMBEDDING_BACKEND` | `azure` | Backend: `azure` or `ollama` |
+| `--azure-endpoint` | `AZURE_OPENAI_ENDPOINT` | - | Azure OpenAI endpoint (required for azure) |
+| `--azure-key` | `AZURE_OPENAI_KEY` | - | Azure OpenAI API key (required for azure) |
+| `--ollama-url` | `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama API URL |
 | `--model` | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+
+**Recommended Models:**
+- **Ollama**: `nomic-embed-text` (274MB, 768 dimensions, excellent quality)
+- **Azure OpenAI**: `text-embedding-3-small` (best quality/cost ratio)
 
 ## Phase 2: MCP Server (Coming Soon)
 
@@ -197,7 +242,9 @@ The MCP server will:
 ### Prerequisites
 
 - Go 1.23+
-- Azure OpenAI account with text-embedding-3-small deployed
+- **Either**:
+  - [Ollama](https://ollama.ai) for local embeddings (recommended for development)
+  - Azure OpenAI account with text-embedding-3-small deployed
 - [mask](https://github.com/jacobdeichert/mask) (optional, for task automation)
 
 ### Build
