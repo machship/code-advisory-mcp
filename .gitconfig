@@ -1,0 +1,3 @@
+[merge "go-mod-tidy"]
+	name = run go mod tidy
+	driver = go mod tidy

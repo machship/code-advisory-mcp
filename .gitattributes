@@ -1,0 +1,5 @@
+# Treat go.sum as a generated file and run go mod tidy to resolve merge
+# conflicts.
+# You need to run `mask prepare` for this to work.
+go.mod merge=union
+go.sum -text merge=go-mod-tidy
