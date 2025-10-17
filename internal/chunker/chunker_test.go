@@ -110,7 +110,7 @@ More text here.
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			chunks, err := ChunkDocument([]byte(tc.content), tc.baseURL, tc.sourcePath, tc.metadata)
+			chunks, err := ChunkDocument([]byte(tc.content), tc.baseURL, tc.sourcePath, tc.metadata, StrategyH2H3)
 			if err != nil {
 				t.Fatalf("ChunkDocument failed: %v", err)
 			}

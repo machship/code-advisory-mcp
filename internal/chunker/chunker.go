@@ -12,6 +12,17 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
+// ChunkingStrategy defines how to chunk a markdown document.
+type ChunkingStrategy string
+
+const (
+	// StrategyH2H3 chunks by H2 context + H3 sections.
+	StrategyH2H3 ChunkingStrategy = "h2_h3"
+
+	// StrategyH2 chunks by H2 sections only.
+	StrategyH2 ChunkingStrategy = "h2"
+)
+
 // Chunk represents a single chunk of content with metadata.
 type Chunk struct {
 	ID         string
@@ -24,13 +35,26 @@ type Chunk struct {
 }
 
 // ChunkDocument processes a markdown document and returns contextual chunks.
-// It implements the contextual retrieval strategy:
-// 1. Discard H1 and preamble
-// 2. Capture H2 context
-// 3. Prepend context to H3 sections
-// 4. Generate SHA1 ID for each chunk
-// 5. Construct deep-link URLs
-func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata map[string]string) ([]Chunk, error) {
+// The strategy parameter determines the chunking behavior:
+// - h2_h3: H2 context + H3 sections (default)
+// - h2: Each H2 section becomes a chunk
+func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata map[string]string, strategy ChunkingStrategy) ([]Chunk, error) {
+	if strategy == "" {
+		strategy = StrategyH2H3
+	}
+
+	switch strategy {
+	case StrategyH2H3:
+		return chunkH2H3(content, baseURL, sourcePath, metadata)
+	case StrategyH2:
+		return chunkH2(content, baseURL, sourcePath, metadata)
+	default:
+		return chunkH2H3(content, baseURL, sourcePath, metadata)
+	}
+}
+
+// chunkH2H3 implements the H2 context + H3 sections strategy.
+func chunkH2H3(content []byte, baseURL string, sourcePath string, metadata map[string]string) ([]Chunk, error) {
 	md := goldmark.New()
 	doc := md.Parser().Parse(text.NewReader(content))
 
@@ -77,12 +101,12 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 			var chunkContent strings.Builder
 			h2ContextStr := strings.TrimSpace(h2Context.String())
 			chunkContent.WriteString(h2ContextStr)
-			
+
 			// Only add blank line if H2 context is not empty
 			if h2ContextStr != "" {
-				chunkContent.WriteString("\n\n")  // Blank line before H3
+				chunkContent.WriteString("\n\n") // Blank line before H3
 			}
-			
+
 			chunkContent.WriteString("### ")
 			chunkContent.WriteString(h3Text)
 			chunkContent.WriteString("\n\n")
@@ -376,6 +400,66 @@ func constructURL(baseURL, heading string) string {
 		return baseURL
 	}
 	return baseURL + "#" + fragment
+}
+
+// chunkH2 implements the H2 section strategy.
+// Each H2 section (including all its content until the next H2) becomes a chunk.
+func chunkH2(content []byte, baseURL string, sourcePath string, metadata map[string]string) ([]Chunk, error) {
+	md := goldmark.New()
+	doc := md.Parser().Parse(text.NewReader(content))
+
+	var chunks []Chunk
+
+	err := ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		heading, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		switch heading.Level {
+		case 1:
+			// Skip H1 - we discard it
+			return ast.WalkSkipChildren, nil
+
+		case 2:
+			// Create chunk for entire H2 section
+			h2Text := extractText(heading, content)
+			h2Content := extractContentUntilNextHeading(heading, content)
+
+			var chunkContent strings.Builder
+			chunkContent.WriteString("## ")
+			chunkContent.WriteString(h2Text)
+			chunkContent.WriteString("\n\n")
+			chunkContent.WriteString(h2Content)
+
+			chunkText := strings.TrimSpace(chunkContent.String())
+			id := generateID(chunkText)
+			url := constructURL(baseURL, h2Text)
+
+			chunk := Chunk{
+				ID:         id,
+				Content:    chunkText,
+				URL:        url,
+				SourceFile: sourcePath,
+				H2Heading:  h2Text,
+				H3Heading:  "", // No H3 in this strategy
+				Metadata:   copyMetadata(metadata),
+			}
+			chunks = append(chunks, chunk)
+		}
+
+		return ast.WalkSkipChildren, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return chunks, nil
 }
 
 // copyMetadata creates a copy of the metadata map.

@@ -134,7 +134,8 @@ func run(cfg config) error {
 	failedChunks := 0
 
 	for i, doc := range m.Documents {
-		log.Printf("[%d/%d] Processing %s", i+1, len(m.Documents), doc.Path)
+		strategy := chunker.ChunkingStrategy(doc.GetChunkingStrategy())
+		log.Printf("[%d/%d] Processing %s (strategy: %s)", i+1, len(m.Documents), doc.Path, strategy)
 
 		// Read file content
 		content, err := os.ReadFile(doc.Path)
@@ -152,7 +153,7 @@ func run(cfg config) error {
 		}
 
 		// Chunk the document
-		chunks, err := chunker.ChunkDocument(content, doc.URI, absPath, doc.Metadata)
+		chunks, err := chunker.ChunkDocument(content, doc.URI, absPath, doc.Metadata, strategy)
 		if err != nil {
 			log.Printf("  ERROR: failed to chunk document: %v", err)
 			failedChunks++
