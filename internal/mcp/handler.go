@@ -148,6 +148,12 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 		return mcp.NewToolResultError("advisories collection not found"), nil
 	}
 
+	// Cap n_results to collection size
+	collectionSize := collection.Count()
+	if nResults > collectionSize {
+		nResults = collectionSize
+	}
+
 	// Query the collection
 	results, err := collection.QueryEmbedding(ctx, queryEmbedding, nResults, nil, nil)
 	if err != nil {
