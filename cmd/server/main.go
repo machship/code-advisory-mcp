@@ -1,10 +1,14 @@
 package main
 
 import (
+	"embed"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github/machship/code-advisory-mcp/internal/embedder"
@@ -13,6 +17,9 @@ import (
 	mcpServer "github.com/mark3labs/mcp-go/server"
 )
 
+//go:embed embedded
+var embeddedDB embed.FS
+
 type config struct {
 	dbPath        string
 	backend       string
@@ -20,6 +27,7 @@ type config struct {
 	azureKey      string
 	ollamaBaseURL string
 	model         string
+	useEmbedded   bool
 }
 
 func main() {
@@ -33,7 +41,7 @@ func main() {
 func parseFlags() config {
 	cfg := config{}
 
-	flag.StringVar(&cfg.dbPath, "db", getEnv("DB_PATH", "advisory.db"), "Path to advisory database")
+	flag.StringVar(&cfg.dbPath, "db", getEnv("DB_PATH", ""), "Path to advisory database (empty = use embedded)")
 	flag.StringVar(&cfg.backend, "backend", getEnv("EMBEDDING_BACKEND", "ollama"), "Embedding backend: azure or ollama")
 	flag.StringVar(&cfg.azureEndpoint, "azure-endpoint", getEnv("AZURE_OPENAI_ENDPOINT", ""), "Azure OpenAI endpoint (required for azure backend)")
 	flag.StringVar(&cfg.azureKey, "azure-key", getEnv("AZURE_OPENAI_KEY", ""), "Azure OpenAI API key (required for azure backend)")
@@ -41,6 +49,9 @@ func parseFlags() config {
 	flag.StringVar(&cfg.model, "model", getEnv("EMBEDDING_MODEL", "nomic-embed-text"), "Embedding model name")
 
 	flag.Parse()
+
+	// Use embedded database if no path provided
+	cfg.useEmbedded = (cfg.dbPath == "")
 
 	// Normalize backend
 	cfg.backend = strings.ToLower(cfg.backend)
@@ -72,7 +83,94 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
+// extractEmbeddedDB extracts the embedded database to a temporary directory.
+func extractEmbeddedDB() (string, func() error, error) {
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "code-advisory-db-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+
+	cleanup := func() error {
+		return os.RemoveAll(tmpDir)
+	}
+
+	// Walk the embedded filesystem and copy to temp dir
+	err = fs.WalkDir(embeddedDB, "embedded/advisory-ollama.db", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Get relative path
+		relPath, err := filepath.Rel("embedded/advisory-ollama.db", path)
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(tmpDir, "advisory-ollama.db", relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(targetPath, 0755)
+		}
+
+		// Copy file
+		srcFile, err := embeddedDB.Open(path)
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		// Ensure parent directory exists
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return err
+		}
+
+		dstFile, err := os.Create(targetPath)
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to extract database: %w", err)
+	}
+
+	dbPath := filepath.Join(tmpDir, "advisory-ollama.db")
+	return dbPath, cleanup, nil
+}
+
 func run(cfg config) error {
+	// Extract embedded database if needed
+	var dbPath string
+	var cleanupFunc func() error
+
+	if cfg.useEmbedded {
+		var err error
+		dbPath, cleanupFunc, err = extractEmbeddedDB()
+		if err != nil {
+			return fmt.Errorf("failed to extract embedded database: %w", err)
+		}
+		defer func() {
+			if cleanupFunc != nil {
+				if err := cleanupFunc(); err != nil {
+					log.Printf("Warning: failed to cleanup temp database: %v", err)
+				}
+			}
+		}()
+		log.Printf("Using embedded database")
+	} else {
+		dbPath = cfg.dbPath
+		log.Printf("Using external database: %s", dbPath)
+	}
+
 	// Determine backend type
 	var backend embedder.Backend
 	switch cfg.backend {
@@ -86,7 +184,7 @@ func run(cfg config) error {
 
 	// Initialize MCP handler
 	handler, err := mcp.NewHandler(mcp.Config{
-		DBPath:        cfg.dbPath,
+		DBPath:        dbPath,
 		Backend:       backend,
 		Endpoint:      cfg.azureEndpoint,
 		APIKey:        cfg.azureKey,
@@ -113,7 +211,11 @@ func run(cfg config) error {
 	handler.RegisterPrompts(server)
 
 	log.Printf("Starting Code Advisory MCP Server")
-	log.Printf("  Database: %s", cfg.dbPath)
+	if cfg.useEmbedded {
+		log.Printf("  Database: embedded (extracted to temp)")
+	} else {
+		log.Printf("  Database: %s", cfg.dbPath)
+	}
 	log.Printf("  Backend: %s", cfg.backend)
 	log.Printf("  Model: %s", cfg.model)
 
