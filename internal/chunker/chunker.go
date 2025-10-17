@@ -75,8 +75,14 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 			h3Content := extractContentUntilNextHeading(heading, content)
 
 			var chunkContent strings.Builder
-			chunkContent.WriteString(h2Context.String())
-			chunkContent.WriteString("\n\n")  // Blank line before H3
+			h2ContextStr := strings.TrimSpace(h2Context.String())
+			chunkContent.WriteString(h2ContextStr)
+			
+			// Only add blank line if H2 context is not empty
+			if h2ContextStr != "" {
+				chunkContent.WriteString("\n\n")  // Blank line before H3
+			}
+			
 			chunkContent.WriteString("### ")
 			chunkContent.WriteString(h3Text)
 			chunkContent.WriteString("\n\n")
