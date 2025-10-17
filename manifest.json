@@ -3,6 +3,7 @@
     {
       "path": "resources/Effective-Go.md",
       "uri": "https://go.dev/doc/effective_go",
+      "chunking_strategy": "h2_h3",
       "metadata": {
         "language": "Go",
         "category": "best-practices",
@@ -13,6 +14,7 @@
     {
       "path": "resources/CodeReviewComments.md",
       "uri": "https://go.dev/wiki/CodeReviewComments",
+      "chunking_strategy": "h2",
       "metadata": {
         "language": "Go",
         "category": "code-review",
@@ -23,6 +25,7 @@
     {
       "path": "resources/TestComments.md",
       "uri": "https://go.dev/wiki/TestComments",
+      "chunking_strategy": "h2",
       "metadata": {
         "language": "Go",
         "category": "testing",
