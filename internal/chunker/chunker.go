@@ -76,6 +76,7 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 
 			var chunkContent strings.Builder
 			chunkContent.WriteString(h2Context.String())
+			chunkContent.WriteString("\n\n")  // Blank line before H3
 			chunkContent.WriteString("### ")
 			chunkContent.WriteString(h3Text)
 			chunkContent.WriteString("\n\n")
