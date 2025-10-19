@@ -2,7 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"time"
 
 	"github/machship/code-advisory-mcp/internal/embedder"
 
@@ -18,6 +22,7 @@ type Handler struct {
 	dbPath   string
 	backend  embedder.Backend
 	model    string
+	queryLog io.Writer // Optional query logger
 }
 
 // Config holds configuration for the MCP handler.
@@ -29,6 +34,27 @@ type Config struct {
 	APIKey        string
 	Model         string
 	OllamaBaseURL string
+	QueryLog      io.Writer // Optional: writer for query/response logging
+}
+
+// QueryLogEntry represents a logged query and response.
+type QueryLogEntry struct {
+	Timestamp   time.Time        `json:"timestamp"`
+	Task        string           `json:"task"`
+	Scope       string           `json:"scope"`
+	NResults    int              `json:"n_results"`
+	ResultCount int              `json:"result_count"`
+	Duration    string           `json:"duration"`
+	Results     []QueryLogResult `json:"results,omitempty"`
+	Error       string           `json:"error,omitempty"`
+}
+
+// QueryLogResult represents a single result in the log.
+type QueryLogResult struct {
+	Relevance float32 `json:"relevance"`
+	Title     string  `json:"title,omitempty"`
+	URL       string  `json:"url,omitempty"`
+	Preview   string  `json:"preview"` // First 200 chars of content
 }
 
 // NewHandler creates a new MCP handler.
@@ -51,6 +77,7 @@ func NewHandler(cfg Config) (*Handler, error) {
 		dbPath:   cfg.DBPath,
 		backend:  cfg.Backend,
 		model:    cfg.Model,
+		queryLog: cfg.QueryLog,
 	}, nil
 }
 
@@ -103,9 +130,16 @@ func (h *Handler) RegisterPrompts(s *server.MCPServer) {
 
 // fetchAdvisoryForTask handles the fetch_advisory_for_task tool invocation.
 func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	startTime := time.Now()
+
 	// Extract parameters using helper methods
 	task, err := request.RequireString("task")
 	if err != nil {
+		h.logQuery(QueryLogEntry{
+			Timestamp: startTime,
+			Error:     "task parameter is required",
+			Duration:  time.Since(startTime).String(),
+		})
 		return mcp.NewToolResultError("task parameter is required"), nil
 	}
 
@@ -128,6 +162,14 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 	// Generate query embedding
 	queryEmbedding, err := h.embedder.Embed(ctx, query)
 	if err != nil {
+		h.logQuery(QueryLogEntry{
+			Timestamp: startTime,
+			Task:      task,
+			Scope:     scope,
+			NResults:  nResults,
+			Error:     fmt.Sprintf("failed to generate embedding: %v", err),
+			Duration:  time.Since(startTime).String(),
+		})
 		return mcp.NewToolResultError(fmt.Sprintf("failed to generate embedding: %v", err)), nil
 	}
 
@@ -139,12 +181,28 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 		var err error
 		db, err = chromem.NewPersistentDB(h.dbPath, false)
 		if err != nil {
+			h.logQuery(QueryLogEntry{
+				Timestamp: startTime,
+				Task:      task,
+				Scope:     scope,
+				NResults:  nResults,
+				Error:     fmt.Sprintf("failed to load database: %v", err),
+				Duration:  time.Since(startTime).String(),
+			})
 			return mcp.NewToolResultError(fmt.Sprintf("failed to load database: %v", err)), nil
 		}
 	}
 
 	collection := db.GetCollection("advisories", nil)
 	if collection == nil {
+		h.logQuery(QueryLogEntry{
+			Timestamp: startTime,
+			Task:      task,
+			Scope:     scope,
+			NResults:  nResults,
+			Error:     "advisories collection not found",
+			Duration:  time.Since(startTime).String(),
+		})
 		return mcp.NewToolResultError("advisories collection not found"), nil
 	}
 
@@ -157,11 +215,38 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 	// Query the collection
 	results, err := collection.QueryEmbedding(ctx, queryEmbedding, nResults, nil, nil)
 	if err != nil {
+		h.logQuery(QueryLogEntry{
+			Timestamp: startTime,
+			Task:      task,
+			Scope:     scope,
+			NResults:  nResults,
+			Error:     fmt.Sprintf("failed to query collection: %v", err),
+			Duration:  time.Since(startTime).String(),
+		})
 		return mcp.NewToolResultError(fmt.Sprintf("failed to query collection: %v", err)), nil
 	}
 
 	if len(results) == 0 {
+		h.logQuery(QueryLogEntry{
+			Timestamp:   startTime,
+			Task:        task,
+			Scope:       scope,
+			NResults:    nResults,
+			ResultCount: 0,
+			Duration:    time.Since(startTime).String(),
+		})
 		return mcp.NewToolResultText("No relevant advisories found for the given task."), nil
+	}
+
+	// Build log entry
+	logEntry := QueryLogEntry{
+		Timestamp:   startTime,
+		Task:        task,
+		Scope:       scope,
+		NResults:    nResults,
+		ResultCount: len(results),
+		Duration:    time.Since(startTime).String(),
+		Results:     make([]QueryLogResult, len(results)),
 	}
 
 	// Format results
@@ -171,26 +256,63 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 		response += fmt.Sprintf("# Advisory %d (Relevance: %.1f%%)\n\n", i+1, result.Similarity*100)
 
 		// Add title from metadata (or fall back to source file)
-		if title, ok := result.Metadata["title"]; ok {
+		title := ""
+		if t, ok := result.Metadata["title"]; ok {
+			title = t
 			response += fmt.Sprintf("**Source:** %s\n\n", title)
-		} else if sourceFile, ok := result.Metadata["source_file"]; ok {
-			response += fmt.Sprintf("**Source:** %s\n\n", sourceFile)
+		} else if sf, ok := result.Metadata["source_file"]; ok {
+			title = sf
+			response += fmt.Sprintf("**Source:** %s\n\n", title)
 		}
 
 		// Add URL
-		if url, ok := result.Metadata["url"]; ok {
+		url := ""
+		if u, ok := result.Metadata["url"]; ok {
+			url = u
 			response += fmt.Sprintf("**URL:** %s\n\n", url)
 		}
 
 		// Add content (headings are already in the content)
 		response += fmt.Sprintf("%s\n\n", result.Content)
 
+		// Build log result
+		preview := result.Content
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		logEntry.Results[i] = QueryLogResult{
+			Relevance: result.Similarity,
+			Title:     title,
+			URL:       url,
+			Preview:   preview,
+		}
+
 		if i < len(results)-1 {
 			response += "---\n\n"
 		}
 	}
 
+	// Log the query
+	h.logQuery(logEntry)
+
 	return mcp.NewToolResultText(response), nil
+}
+
+// logQuery writes a query log entry to the query log if configured.
+func (h *Handler) logQuery(entry QueryLogEntry) {
+	if h.queryLog == nil {
+		return
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		log.Printf("Warning: failed to marshal query log entry: %v", err)
+		return
+	}
+
+	if _, err := h.queryLog.Write(append(data, '\n')); err != nil {
+		log.Printf("Warning: failed to write query log: %v", err)
+	}
 }
 
 // getPromptInstructions returns prompt instructions for using the code advisory tool.
