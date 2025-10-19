@@ -49,7 +49,11 @@ func run(cfg config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create export file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Printf("Warning: failed to close file: %v", err)
+		}
+	}()
 
 	if err := db.ExportToWriter(file, cfg.compress, ""); err != nil {
 		return fmt.Errorf("failed to export: %w", err)
