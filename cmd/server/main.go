@@ -1,24 +1,23 @@
 package main
 
 import (
-	"embed"
+	"bytes"
+	_ "embed"
 	"flag"
 	"fmt"
-	"io"
-	"io/fs"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github/machship/code-advisory-mcp/internal/embedder"
 	"github/machship/code-advisory-mcp/internal/mcp"
 
 	mcpServer "github.com/mark3labs/mcp-go/server"
+	"github.com/philippgille/chromem-go"
 )
 
-//go:embed embedded
-var embeddedDB embed.FS
+//go:embed embedded/advisory.gob
+var embeddedDBBytes []byte
 
 type config struct {
 	dbPath        string
@@ -83,94 +82,23 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-// extractEmbeddedDB extracts the embedded database to a temporary directory.
-func extractEmbeddedDB() (string, func() error, error) {
-	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "code-advisory-db-*")
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temp dir: %w", err)
+// loadEmbeddedDB loads the embedded database from memory.
+func loadEmbeddedDB() (*chromem.DB, error) {
+	// Create in-memory database
+	db := chromem.NewDB()
+
+	// Create a reader from the embedded bytes
+	reader := bytes.NewReader(embeddedDBBytes)
+
+	// Import from reader
+	if err := db.ImportFromReader(reader, ""); err != nil {
+		return nil, fmt.Errorf("failed to import embedded database: %w", err)
 	}
 
-	cleanup := func() error {
-		return os.RemoveAll(tmpDir)
-	}
-
-	// Walk the embedded filesystem and copy to temp dir
-	err = fs.WalkDir(embeddedDB, "embedded/advisory-ollama.db", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Get relative path
-		relPath, err := filepath.Rel("embedded/advisory-ollama.db", path)
-		if err != nil {
-			return err
-		}
-
-		targetPath := filepath.Join(tmpDir, "advisory-ollama.db", relPath)
-
-		if d.IsDir() {
-			return os.MkdirAll(targetPath, 0755)
-		}
-
-		// Copy file
-		srcFile, err := embeddedDB.Open(path)
-		if err != nil {
-			return err
-		}
-		defer srcFile.Close()
-
-		// Ensure parent directory exists
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return err
-		}
-
-		dstFile, err := os.Create(targetPath)
-		if err != nil {
-			return err
-		}
-		defer dstFile.Close()
-
-		if _, err := io.Copy(dstFile, srcFile); err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("failed to extract database: %w", err)
-	}
-
-	dbPath := filepath.Join(tmpDir, "advisory-ollama.db")
-	return dbPath, cleanup, nil
+	return db, nil
 }
 
 func run(cfg config) error {
-	// Extract embedded database if needed
-	var dbPath string
-	var cleanupFunc func() error
-
-	if cfg.useEmbedded {
-		var err error
-		dbPath, cleanupFunc, err = extractEmbeddedDB()
-		if err != nil {
-			return fmt.Errorf("failed to extract embedded database: %w", err)
-		}
-		defer func() {
-			if cleanupFunc != nil {
-				if err := cleanupFunc(); err != nil {
-					log.Printf("Warning: failed to cleanup temp database: %v", err)
-				}
-			}
-		}()
-		log.Printf("Using embedded database")
-	} else {
-		dbPath = cfg.dbPath
-		log.Printf("Using external database: %s", dbPath)
-	}
-
 	// Determine backend type
 	var backend embedder.Backend
 	switch cfg.backend {
@@ -182,23 +110,40 @@ func run(cfg config) error {
 		return fmt.Errorf("unsupported backend: %s", cfg.backend)
 	}
 
-	// Initialize MCP handler
-	handler, err := mcp.NewHandler(mcp.Config{
-		DBPath:        dbPath,
-		Backend:       backend,
-		Endpoint:      cfg.azureEndpoint,
-		APIKey:        cfg.azureKey,
-		Model:         cfg.model,
-		OllamaBaseURL: cfg.ollamaBaseURL,
-	})
+	// Initialize MCP handler with either embedded DB or path
+	var handler *mcp.Handler
+	var err error
+
+	if cfg.useEmbedded {
+		log.Printf("Loading embedded database")
+		db, dbErr := loadEmbeddedDB()
+		if dbErr != nil {
+			return fmt.Errorf("failed to load embedded database: %w", dbErr)
+		}
+
+		handler, err = mcp.NewHandler(mcp.Config{
+			DB:            db,
+			Backend:       backend,
+			Endpoint:      cfg.azureEndpoint,
+			APIKey:        cfg.azureKey,
+			Model:         cfg.model,
+			OllamaBaseURL: cfg.ollamaBaseURL,
+		})
+	} else {
+		log.Printf("Loading external database: %s", cfg.dbPath)
+		handler, err = mcp.NewHandler(mcp.Config{
+			DBPath:        cfg.dbPath,
+			Backend:       backend,
+			Endpoint:      cfg.azureEndpoint,
+			APIKey:        cfg.azureKey,
+			Model:         cfg.model,
+			OllamaBaseURL: cfg.ollamaBaseURL,
+		})
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to create MCP handler: %w", err)
 	}
-	defer func() {
-		if err := handler.Close(); err != nil {
-			log.Printf("Warning: failed to close handler: %v", err)
-		}
-	}()
 
 	// Create MCP server
 	server := mcpServer.NewMCPServer(

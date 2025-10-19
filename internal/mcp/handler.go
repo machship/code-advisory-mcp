@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github/machship/code-advisory-mcp/internal/database"
 	"github/machship/code-advisory-mcp/internal/embedder"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -14,7 +13,7 @@ import (
 
 // Handler implements the MCP server handler for code advisory tools.
 type Handler struct {
-	db       *database.Database
+	db       *chromem.DB
 	embedder *embedder.Embedder
 	dbPath   string
 	backend  embedder.Backend
@@ -23,7 +22,8 @@ type Handler struct {
 
 // Config holds configuration for the MCP handler.
 type Config struct {
-	DBPath        string
+	DB            *chromem.DB // Optional: pre-loaded database
+	DBPath        string      // Optional: path to database file
 	Backend       embedder.Backend
 	Endpoint      string
 	APIKey        string
@@ -45,14 +45,8 @@ func NewHandler(cfg Config) (*Handler, error) {
 		return nil, fmt.Errorf("failed to create embedder: %w", err)
 	}
 
-	// Load database
-	db, err := database.New(cfg.DBPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load database: %w", err)
-	}
-
 	return &Handler{
-		db:       db,
+		db:       cfg.DB,
 		embedder: emb,
 		dbPath:   cfg.DBPath,
 		backend:  cfg.Backend,
@@ -137,10 +131,16 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 		return mcp.NewToolResultError(fmt.Sprintf("failed to generate embedding: %v", err)), nil
 	}
 
-	// Load database and get collection
-	db, err := chromem.NewPersistentDB(h.dbPath, false)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("failed to load database: %v", err)), nil
+	// Get database (either pre-loaded or load from path)
+	var db *chromem.DB
+	if h.db != nil {
+		db = h.db
+	} else {
+		var err error
+		db, err = chromem.NewPersistentDB(h.dbPath, false)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("failed to load database: %v", err)), nil
+		}
 	}
 
 	collection := db.GetCollection("advisories", nil)
@@ -292,12 +292,4 @@ The tool searches %d indexed guidelines and returns results in under 500ms.
 			},
 		},
 	}, nil
-}
-
-// Close cleans up resources.
-func (h *Handler) Close() error {
-	if h.db != nil {
-		return h.db.Close()
-	}
-	return nil
 }
