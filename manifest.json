@@ -38,14 +38,14 @@
     },
     {
       "path": "resources/Go-Coding-Style-Guide.md",
-      "uri": "https://google.github.io/styleguide/go",
+      "uri": "https://github.com/machship/v3-issues/wiki/Go-Coding-Style-Guide",
       "chunking_strategy": "h2_h3",
       "metadata": {
-        "title": "Google Go Style Guide",
+        "title": "MachShip Go Style Guide",
         "language": "Go",
         "category": "style-guide",
         "version": "1.0",
-        "author": "Google"
+        "author": "MachShip"
       }
     }
   ]
