@@ -28,15 +28,6 @@ go.work.sum
 # env file
 .env
 
-# Database files
+# Database files (but not the embedded one!)
 *.db
-
-# Editor/IDE
-# .idea/
-# .vscode/
-
-# Temporary files
-tmp/
-
-# Embedded database
-cmd/server/embedded/advisory.gob
+!cmd/server/embedded/*.gob

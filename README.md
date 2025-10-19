@@ -61,6 +61,8 @@ ollama pull nomic-embed-text
 
 ### 2. Install the MCP Server
 
+The server includes an embedded database with 126 Go coding standard chunks, so it works immediately after installation without any additional setup.
+
 **Option A: Install from source**
 ```bash
 # Clone the repository
@@ -70,7 +72,7 @@ cd code-advisory-mcp
 # Install dependencies
 go mod download
 
-# Build the MCP server
+# Build the MCP server (includes embedded database)
 go build -o bin/code-advisory-mcp ./cmd/server
 
 # Install to your PATH (optional)
@@ -82,6 +84,11 @@ sudo cp bin/code-advisory-mcp /usr/local/bin/
 go install github.com/machship/code-advisory-mcp/cmd/server@latest
 ```
 
+The server binary is self-contained and includes:
+- 126 chunks from Go documentation (770KB)
+- Comprehensive usage instructions (19KB)
+- Total binary size: ~14MB
+
 ### 3. Verify Installation
 
 ```bash
@@ -90,9 +97,12 @@ go install github.com/machship/code-advisory-mcp/cmd/server@latest
 
 # View usage instructions
 ./bin/code-advisory-mcp --print-instructions
+
+# Test the embedded database (optional)
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"0.1.0","capabilities":{}}}' | ./bin/code-advisory-mcp
 ```
 
-You should see the MCP server help with available flags.
+You should see the MCP server help with available flags and the initialize response.
 
 ## Quick Start
 
@@ -110,9 +120,13 @@ The server includes an embedded database with 126 chunks from official Go docume
 
 The server communicates via JSON-RPC over stdin/stdout (MCP protocol).
 
-### Configure with GitHub Copilot
+### Configure with MCP Clients
 
-Add to your GitHub Copilot settings (e.g., `~/.config/github-copilot/mcp.json`):
+The server works with any MCP-compatible client. Configuration depends on your client:
+
+#### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ```json
 {
@@ -129,35 +143,57 @@ Add to your GitHub Copilot settings (e.g., `~/.config/github-copilot/mcp.json`):
 }
 ```
 
-Or with Azure OpenAI:
+#### VS Code with Cline Extension
+
+Add to Cline's MCP settings:
 
 ```json
 {
-  "mcpServers": {
-    "code-advisory": {
-      "command": "/usr/local/bin/code-advisory-mcp",
-      "args": [],
-      "env": {
-        "EMBEDDING_BACKEND": "azure",
-        "AZURE_OPENAI_ENDPOINT": "https://your-resource.openai.azure.com",
-        "AZURE_OPENAI_KEY": "your-api-key",
-        "EMBEDDING_MODEL": "text-embedding-3-small"
-      }
+  "code-advisory": {
+    "command": "/usr/local/bin/code-advisory-mcp",
+    "args": [],
+    "env": {
+      "EMBEDDING_BACKEND": "ollama",
+      "EMBEDDING_MODEL": "nomic-embed-text"
     }
   }
 }
 ```
 
-Restart your IDE and the server will be available to GitHub Copilot!
+#### GitHub Copilot (via CLI)
+
+GitHub Copilot CLI doesn't currently support custom MCP servers directly. You can:
+
+1. Use the query tool standalone:
+   ```bash
+   ./bin/query-advisory-db --query "your question"
+   ```
+
+2. Or integrate via a wrapper script that Copilot can call
+
+#### With Azure OpenAI
+
+Replace the `env` section in any configuration:
+
+```json
+"env": {
+  "EMBEDDING_BACKEND": "azure",
+  "AZURE_OPENAI_ENDPOINT": "https://your-resource.openai.azure.com",
+  "AZURE_OPENAI_KEY": "your-api-key",
+  "EMBEDDING_MODEL": "text-embedding-3-small"
+}
+```
+
+Restart your MCP client after configuration changes.
 
 
 ## Usage
 
 ### Using the MCP Tool
 
-Once configured with GitHub Copilot, you can ask for coding guidance:
+Once configured with an MCP client, you can ask for coding guidance:
 
-**Example prompts to Copilot:**
+**Example prompts:**
 - "How should I handle errors in Go?"
 - "What's the best way to structure table-driven tests?"
 - "Show me the proper way to use interfaces in Go"
