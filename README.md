@@ -124,6 +124,25 @@ The server communicates via JSON-RPC over stdin/stdout (MCP protocol).
 
 The server works with any MCP-compatible client. Configuration depends on your client:
 
+#### Copilot CLI
+
+Add to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "code-advisory": {
+      "type": "local",
+      "command": "/user/local/bin/code-advisory-mcp",
+      "tools": [
+        "*"
+      ],
+      "args": []
+    }
+  }
+}
+```
+
 #### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
