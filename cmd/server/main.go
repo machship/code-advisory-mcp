@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github/machship/code-advisory-mcp/internal/embedder"
 	"github/machship/code-advisory-mcp/internal/mcp"
@@ -31,7 +32,7 @@ type config struct {
 	model             string
 	useEmbedded       bool
 	printInstructions bool
-	queryLogPath      string
+	queryLogDir       string
 }
 
 func main() {
@@ -56,7 +57,7 @@ func parseFlags() config {
 	flag.StringVar(&cfg.azureKey, "azure-key", getEnv("AZURE_OPENAI_KEY", ""), "Azure OpenAI API key (required for azure backend)")
 	flag.StringVar(&cfg.ollamaBaseURL, "ollama-url", getEnv("OLLAMA_BASE_URL", "http://localhost:11434/api"), "Ollama base URL (for ollama backend)")
 	flag.StringVar(&cfg.model, "model", getEnv("EMBEDDING_MODEL", "nomic-embed-text"), "Embedding model name")
-	flag.StringVar(&cfg.queryLogPath, "query-log", getEnv("QUERY_LOG_PATH", ""), "Path to query log file (empty = no logging)")
+	flag.StringVar(&cfg.queryLogDir, "query-log-dir", getEnv("QUERY_LOG_DIR", ""), "Directory for query log files (empty = no logging)")
 	flag.BoolVar(&cfg.printInstructions, "print-instructions", false, "Print prompt instructions and exit")
 
 	flag.Parse()
@@ -122,11 +123,21 @@ func run(cfg config) error {
 		return fmt.Errorf("unsupported backend: %s", cfg.backend)
 	}
 
-	// Open query log file if specified
+	// Create query log file if directory specified
 	var queryLogFile *os.File
-	if cfg.queryLogPath != "" {
+	if cfg.queryLogDir != "" {
+		// Ensure directory exists
+		if err := os.MkdirAll(cfg.queryLogDir, 0755); err != nil {
+			return fmt.Errorf("failed to create query log directory: %w", err)
+		}
+
+		// Create unique log file with timestamp and PID
+		timestamp := time.Now().Format("20060102-150405")
+		logFilename := fmt.Sprintf("queries-%s-%d.log", timestamp, os.Getpid())
+		logPath := fmt.Sprintf("%s/%s", cfg.queryLogDir, logFilename)
+
 		var err error
-		queryLogFile, err = os.OpenFile(cfg.queryLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		queryLogFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			return fmt.Errorf("failed to open query log file: %w", err)
 		}
@@ -135,7 +146,7 @@ func run(cfg config) error {
 				log.Printf("Warning: failed to close query log file: %v", err)
 			}
 		}()
-		log.Printf("Query logging enabled: %s", cfg.queryLogPath)
+		log.Printf("Query logging enabled: %s", logPath)
 	}
 
 	// Initialize MCP handler with either embedded DB or path
