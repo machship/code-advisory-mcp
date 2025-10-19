@@ -39,4 +39,4 @@ go.work.sum
 tmp/
 
 # Embedded database
-cmd/server/embedded/
+cmd/server/embedded/advisory.gob
