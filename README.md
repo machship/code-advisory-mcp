@@ -1,159 +1,396 @@
 # Code Advisory MCP Server
 
-A Model Context Protocol (MCP) server that provides code advisory and style guide information through semantic search. This tool enables GitHub Copilot and other MCP clients to query company coding standards and best practices on-demand.
+A Model Context Protocol (MCP) server that provides instant access to coding standards, style guides, and best practices through semantic search. GitHub Copilot and other MCP clients can query your company's coding standards and get relevant guidance with deep-linked URLs.
 
 ## Overview
 
-This project implements a vector search system for coding standards documentation. It chunks markdown documents using a contextual retrieval strategy, generates embeddings via Azure OpenAI, and stores them in a local vector database for fast semantic search.
+This project provides a complete solution for making coding standards searchable via MCP:
+
+1. **Database Builder** - Chunks markdown documents and generates embeddings
+2. **MCP Server** - Serves advisories via the `fetch_advisory_for_task` tool
+3. **Embedded Database** - Self-contained binary with built-in Go standards
+
+The server uses vector similarity search to find the most relevant coding guidelines based on natural language task descriptions.
 
 ## Features
 
-- **Multiple Backends**: Support for both Azure OpenAI and local Ollama embeddings
-- **Contextual Chunking**: Smart markdown parsing that preserves document structure and context
-- **Idempotent Processing**: Skip already-embedded content to save API calls
-- **Portable Database**: Single-file database that can be embedded in binaries
-- **Deep-Linked Results**: Automatic URL fragment generation for precise documentation navigation
-- **No Cloud Required**: Use Ollama for completely local, private embeddings
+- ✅ **Embedded Database**: Self-contained 14MB binary with 126 Go coding standard chunks
+- ✅ **Multiple Backends**: Azure OpenAI or local Ollama embeddings
+- ✅ **Contextual Chunking**: Smart markdown parsing preserving document structure
+- ✅ **Deep-Linked Results**: Precise URL fragments to exact documentation sections
+- ✅ **No Cloud Required**: Use Ollama for completely local, private operation
+- ✅ **Production Ready**: All phases complete and tested
 
-## Quick Start with Ollama (No API Keys Needed!)
+## Installation
 
-The fastest way to get started is with Ollama, which runs completely locally:
+### Prerequisites
 
+**Required:**
+- Go 1.23 or later
+- Git
+
+**Choose one embedding backend:**
+- **Ollama** (recommended for local development) - No API keys needed
+- **Azure OpenAI** (recommended for production) - Requires Azure account
+
+### 1. Install Ollama (Local Backend)
+
+Ollama provides high-quality embeddings locally without any API keys or cloud services.
+
+**macOS:**
 ```bash
-# 1. Install Ollama (if not already installed)
-# Visit https://ollama.ai or use: brew install ollama
-
-# 2. Pull an embedding model
-ollama pull nomic-embed-text
-
-# 3. Run the demo script
-./demo-ollama.sh
+brew install ollama
 ```
 
-That's it! You now have a working advisory database with 80 chunks from Go documentation.
+**Linux:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
 
-## Phase 1: Database Builder (Complete)
+**Windows:**
+Download from [ollama.ai](https://ollama.ai)
 
-The database builder tool processes markdown documents and creates a searchable vector database.
+**Start Ollama and pull the embedding model:**
+```bash
+# Start Ollama service (if not already running)
+ollama serve
 
-### Installation
+# Pull the embedding model (274MB, 768 dimensions)
+ollama pull nomic-embed-text
+```
 
+### 2. Install the MCP Server
+
+**Option A: Install from source**
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/machship/code-advisory-mcp.git
 cd code-advisory-mcp
 
 # Install dependencies
 go mod download
 
-# Build the builder tool
+# Build the MCP server
+go build -o bin/code-advisory-mcp ./cmd/server
+
+# Install to your PATH (optional)
+sudo cp bin/code-advisory-mcp /usr/local/bin/
+```
+
+**Option B: Install using go install**
+```bash
+go install github.com/machship/code-advisory-mcp/cmd/server@latest
+```
+
+### 3. Verify Installation
+
+```bash
+# Check the server binary
+./bin/code-advisory-mcp --help
+
+# View usage instructions
+./bin/code-advisory-mcp --print-instructions
+```
+
+You should see the MCP server help with available flags.
+
+## Quick Start
+
+### Test the Server Locally
+
+The server includes an embedded database with 126 chunks from official Go documentation.
+
+```bash
+# Start the MCP server with embedded database
+./bin/code-advisory-mcp
+
+# Or specify a custom database
+./bin/code-advisory-mcp --db /path/to/custom.db
+```
+
+The server communicates via JSON-RPC over stdin/stdout (MCP protocol).
+
+### Configure with GitHub Copilot
+
+Add to your GitHub Copilot settings (e.g., `~/.config/github-copilot/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "code-advisory": {
+      "command": "/usr/local/bin/code-advisory-mcp",
+      "args": [],
+      "env": {
+        "EMBEDDING_BACKEND": "ollama",
+        "EMBEDDING_MODEL": "nomic-embed-text"
+      }
+    }
+  }
+}
+```
+
+Or with Azure OpenAI:
+
+```json
+{
+  "mcpServers": {
+    "code-advisory": {
+      "command": "/usr/local/bin/code-advisory-mcp",
+      "args": [],
+      "env": {
+        "EMBEDDING_BACKEND": "azure",
+        "AZURE_OPENAI_ENDPOINT": "https://your-resource.openai.azure.com",
+        "AZURE_OPENAI_KEY": "your-api-key",
+        "EMBEDDING_MODEL": "text-embedding-3-small"
+      }
+    }
+  }
+}
+```
+
+Restart your IDE and the server will be available to GitHub Copilot!
+
+
+## Usage
+
+### Using the MCP Tool
+
+Once configured with GitHub Copilot, you can ask for coding guidance:
+
+**Example prompts to Copilot:**
+- "How should I handle errors in Go?"
+- "What's the best way to structure table-driven tests?"
+- "Show me the proper way to use interfaces in Go"
+- "How do I implement graceful shutdown for an HTTP server?"
+
+Copilot will use the `fetch_advisory_for_task` tool to retrieve relevant guidelines from your standards.
+
+### Tool Parameters
+
+**fetch_advisory_for_task** accepts:
+
+- `task` (required, string): Detailed description of what you're trying to accomplish
+- `n_results` (optional, integer 1-25, default 10): Number of advisories to return
+
+**Example tool call:**
+```json
+{
+  "task": "implementing error wrapping with context using fmt.Errorf and %w verb for error chains in a file processing pipeline",
+  "n_results": 5
+}
+```
+
+For detailed examples and best practices, run:
+```bash
+./bin/code-advisory-mcp --print-instructions
+```
+
+## Building Custom Databases
+
+The server includes an embedded database with Go standards, but you can build custom databases with your own documentation.
+
+### 1. Build the Database Builder
+
+```bash
 go build -o bin/build-advisory-db ./cmd/builder
 ```
 
-### Usage
+### 2. Create a Manifest
 
-#### 1. Create a Manifest File
-
-Create a JSON manifest listing your markdown documents:
+Create `manifest.json` with your documents:
 
 ```json
 {
   "documents": [
     {
-      "path": "docs/golang/error-handling.md",
-      "uri": "https://standards.company.com/golang/error-handling",
+      "path": "docs/error-handling.md",
+      "uri": "https://standards.company.com/error-handling",
+      "chunking_strategy": "h2_h3",
       "metadata": {
+        "title": "Error Handling Guide",
         "language": "Go",
-        "category": "error-handling",
-        "version": "1.0"
+        "category": "best-practices",
+        "version": "1.0",
+        "author": "Engineering Team"
       }
     }
   ]
 }
 ```
 
-#### 2. Run the Builder
+**Chunking strategies:**
+- `h2_h3` - Split on H2 and H3 headings (preserves H2 context in H3 chunks)
+- `h2` - Split on H2 headings only
 
-**With Ollama (Local, No API Keys):**
+### 3. Build the Database
 
+**With Ollama:**
 ```bash
 ./bin/build-advisory-db \
   --backend ollama \
   --model nomic-embed-text \
   --manifest manifest.json \
-  --output advisory.db
+  --output custom.db
 ```
 
 **With Azure OpenAI:**
-
 ```bash
 ./bin/build-advisory-db \
   --backend azure \
-  --manifest manifest.json \
-  --output advisory.db \
   --azure-endpoint https://your-resource.openai.azure.com \
   --azure-key your-api-key \
-  --model text-embedding-3-small
+  --model text-embedding-3-small \
+  --manifest manifest.json \
+  --output custom.db
 ```
 
-Or using environment variables:
+### 4. Use Your Custom Database
 
 ```bash
-# For Ollama
-export EMBEDDING_BACKEND=ollama
-export EMBEDDING_MODEL=nomic-embed-text
-
-# For Azure OpenAI
-export EMBEDDING_BACKEND=azure
-export AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-export AZURE_OPENAI_KEY=your-api-key
-export EMBEDDING_MODEL=text-embedding-3-small
-
-# Common
-export MANIFEST_FILE=manifest.json
-export OUTPUT_FILE=advisory.db
-
-./bin/build-advisory-db
+./bin/code-advisory-mcp --db custom.db
 ```
 
-#### 3. Re-run for Incremental Updates
-
-The builder is idempotent. Add new documents to your manifest and re-run:
+Or embed it in the binary by replacing `cmd/server/embedded/advisory.gob`:
 
 ```bash
-./bin/build-advisory-db --manifest manifest.json
+# Build export tool
+go build -o bin/export-db ./cmd/export
+
+# Export your database to single file
+./bin/export-db --input custom.db --output cmd/server/embedded/advisory.gob
+
+# Rebuild server with embedded database
+go build -o bin/code-advisory-mcp ./cmd/server
 ```
 
-Existing chunks are skipped, only new content generates embeddings.
+## Configuration
 
-#### 4. Query and Test (Optional)
+### Environment Variables
 
-Test your database with the query tool:
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EMBEDDING_BACKEND` | `ollama` | Backend: `azure` or `ollama` |
+| `EMBEDDING_MODEL` | `nomic-embed-text` | Model name |
+| `AZURE_OPENAI_ENDPOINT` | - | Azure endpoint (required for azure backend) |
+| `AZURE_OPENAI_KEY` | - | Azure API key (required for azure backend) |
+| `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama API URL |
+| `DB_PATH` | (embedded) | Path to external database file |
+
+### Command-Line Flags
 
 ```bash
-# Build query tool
+./bin/code-advisory-mcp --help
+```
+
+| Flag | Description |
+|------|-------------|
+| `--db` | Path to advisory database (empty = use embedded) |
+| `--backend` | Embedding backend: azure or ollama |
+| `--azure-endpoint` | Azure OpenAI endpoint |
+| `--azure-key` | Azure OpenAI API key |
+| `--ollama-url` | Ollama base URL |
+| `--model` | Embedding model name |
+| `--print-instructions` | Print usage instructions and exit |
+
+## Development
+
+### Prerequisites
+
+- Go 1.23+
+- Ollama (for local development) or Azure OpenAI
+- [mask](https://github.com/jacobdeichert/mask) (optional task runner)
+
+### Build All Tools
+
+```bash
+# Build MCP server
+go build -o bin/code-advisory-mcp ./cmd/server
+
+# Build database builder
+go build -o bin/build-advisory-db ./cmd/builder
+
+# Build query tool (for testing)
 go build -o bin/query-advisory-db ./cmd/query
 
-# Query the database
-./bin/query-advisory-db --query "error handling best practices"
+# Build export tool
+go build -o bin/export-db ./cmd/export
 ```
 
-See [QUERY_TOOL.md](QUERY_TOOL.md) for detailed usage.
+Or use mask:
+```bash
+mask build
+```
 
-### How It Works
+### Testing
 
-#### Contextual Retrieval Chunking Strategy
+```bash
+# Run all tests
+mask test
 
-1. **Discard H1 and preamble**: Skip document title and content before first H2
-2. **Capture H2 context**: Extract H2 heading and content up to first H3
-3. **Prepend context to H3 sections**: Each H3 chunk includes:
-   - H2 heading + H2 content (context)
-   - H3 heading + H3 content (specific section)
-4. **Generate document ID**: SHA1 hash of chunk content
-5. **Construct deep-link URL**: Slugified H3 heading appended as fragment
+# Or directly
+go test ./...
 
-**Example Chunk:**
+# Run tests with race detector
+go test -race ./...
 
+# Run specific package tests
+go test ./internal/chunker -v
+```
+
+### Code Quality
+
+```bash
+# Format code
+go tool goimports -w .
+
+# Run static analysis
+go tool staticcheck ./...
+
+# Check for unchecked errors
+go tool errcheck ./...
+
+# Check for vulnerabilities
+go tool govulncheck ./...
+```
+
+Or use mask:
+```bash
+mask check
+```
+
+## Architecture
+
+```
+cmd/
+  server/         # MCP server (main binary)
+  builder/        # Database builder tool
+  query/          # Query tool for testing
+  export/         # Database export tool
+
+internal/
+  chunker/        # Markdown chunking logic
+  embedder/       # Embedding backend clients
+  database/       # chromem-go wrapper
+  manifest/       # Manifest parsing
+  mcp/            # MCP handler and tools
+
+cmd/server/embedded/
+  advisory.gob         # Embedded database (770KB)
+  INSTRUCTIONS.md      # Usage instructions (19KB)
+```
+
+## How It Works
+
+### Contextual Chunking
+
+Documents are split using a contextual retrieval strategy:
+
+1. **Discard H1 and preamble** - Skip document title
+2. **Capture H2 context** - Extract H2 heading and preamble
+3. **Prepend context to H3 sections** - Each H3 chunk includes H2 context
+4. **Generate deep-link URLs** - Slugified headings as URL fragments
+
+**Example chunk:**
 ```markdown
 ## Error Handling
 
@@ -163,135 +400,74 @@ Always wrap errors with context using fmt.Errorf with %w verb.
 
 Use fmt.Errorf("%w", err) to wrap errors:
 
-    if err != nil {
-        return fmt.Errorf("failed to connect: %w", err)
-    }
+if err != nil {
+    return fmt.Errorf("failed to connect: %w", err)
+}
 ```
 
 URL: `https://go.dev/doc/effective_go#error-wrapping`
 
-#### Idempotent Processing
+### Vector Search
 
-- On startup, loads existing `advisory.db` if present
-- For each chunk, computes SHA1 hash of content
-- Queries chromem-go database by ID
-- If exists: skip embedding API call
-- If missing: call embedding API and insert
+1. Query text is embedded using the same model
+2. Semantic similarity search finds top N chunks
+3. Results include source, URL, and full content
+4. Relevance scores help prioritize results
 
-This allows re-running after adding documents without re-embedding existing content.
+### Embedded Database
 
-### Architecture
+The server binary includes a 770KB database with 126 chunks:
+- **Effective Go** (43 chunks)
+- **Go Code Review Comments** (32 chunks)
+- **Go Test Comments** (14 chunks)
+- **Google Go Style Guide** (37 chunks)
 
-```
-cmd/
-  builder/        # Database builder CLI
-    main.go
-internal/
-  chunker/        # Markdown chunking logic
-    chunker.go
-    chunker_test.go
-  embedder/       # Azure OpenAI embedding client
-    embedder.go
-  database/       # chromem-go wrapper
-    database.go
-  manifest/       # JSON manifest parsing
-    manifest.go
-    manifest_test.go
-```
+No external files needed - the binary is completely self-contained.
 
-### Testing
+## Troubleshooting
 
-Run all tests:
+### Ollama Connection Issues
 
 ```bash
-mask test
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# Start Ollama if needed
+ollama serve
+
+# Verify model is downloaded
+ollama list | grep nomic-embed-text
 ```
 
-Or directly with Go:
+### MCP Server Not Appearing in Copilot
 
-```bash
-go test ./...
-```
+1. Check the configuration file path for your IDE
+2. Verify the binary path is absolute
+3. Check environment variables are set correctly
+4. Restart your IDE
+5. Check IDE logs for MCP connection errors
 
-Run specific package tests:
+### Building Custom Database
 
-```bash
-go test ./internal/chunker -v
-```
+If database building fails:
+- Verify manifest.json is valid JSON
+- Check markdown files exist at specified paths
+- Ensure Ollama is running for ollama backend
+- Verify Azure credentials for azure backend
+- Check network connectivity
 
-### Configuration
+## Embedded Database Contents
 
-| Flag | Environment Variable | Default | Description |
-|------|---------------------|---------|-------------|
-| `--manifest` | `MANIFEST_FILE` | *(required)* | Path to JSON manifest file |
-| `--output` | `OUTPUT_FILE` | `advisory.db` | Database output path |
-| `--backend` | `EMBEDDING_BACKEND` | `azure` | Backend: `azure` or `ollama` |
-| `--azure-endpoint` | `AZURE_OPENAI_ENDPOINT` | - | Azure OpenAI endpoint (required for azure) |
-| `--azure-key` | `AZURE_OPENAI_KEY` | - | Azure OpenAI API key (required for azure) |
-| `--ollama-url` | `OLLAMA_BASE_URL` | `http://localhost:11434/api` | Ollama API URL |
-| `--model` | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model name |
+The included database contains:
 
-**Recommended Models:**
-- **Ollama**: `nomic-embed-text` (274MB, 768 dimensions, excellent quality)
-- **Azure OpenAI**: `text-embedding-3-small` (best quality/cost ratio)
+| Source | Chunks | Topics |
+|--------|--------|--------|
+| Effective Go | 43 | Formatting, naming, control structures, data, methods, interfaces, concurrency, errors |
+| Code Review Comments | 32 | Code organization, naming, error handling, testing, documentation |
+| Test Comments | 14 | Test structure, naming, table-driven tests, subtests, helpers |
+| Google Go Style Guide | 37 | Style decisions, best practices, common patterns, design principles |
 
-## Phase 2: MCP Server (Coming Soon)
-
-The MCP server will:
-- Load the vector database
-- Provide `fetch_advisory_for_task` tool
-- Accept task description and scope parameters
-- Return top N relevant results with deep links
-- Include embedded prompt instructions
-
-## Phase 3: Deployment (Coming Soon)
-
-- Docker containerization
-- Database embedding in binary
-- GitHub Copilot integration
-- Production deployment guides
-
-## Development
-
-### Prerequisites
-
-- Go 1.23+
-- **Either**:
-  - [Ollama](https://ollama.ai) for local embeddings (recommended for development)
-  - Azure OpenAI account with text-embedding-3-small deployed
-- [mask](https://github.com/jacobdeichert/mask) (optional, for task automation)
-
-### Build
-
-```bash
-go build -o bin/build-advisory-db ./cmd/builder
-```
-
-### Format Code
-
-```bash
-go tool goimports -w .
-```
-
-### Run Static Analysis
-
-```bash
-mask check
-```
-
-Or manually:
-
-```bash
-go tool staticcheck ./...
-go tool errcheck ./...
-go tool govulncheck ./...
-```
-
-## Dependencies
-
-- [goldmark](https://github.com/yuin/goldmark) - Markdown parsing
-- [chromem-go](https://github.com/philippgille/chromem-go) - Vector database
-- [openai-go](https://github.com/openai/openai-go) - OpenAI client with Azure support
+**Total:** 126 chunks covering comprehensive Go coding standards
 
 ## License
 
@@ -299,28 +475,41 @@ See LICENSE file for details.
 
 ## Contributing
 
-Contributions are welcome! Please:
+Contributions welcome! Please:
 1. Run tests: `mask test`
 2. Format code: `go tool goimports -w .`
-3. Check for issues: `mask check`
+3. Run checks: `mask check`
 4. Submit pull request
+
+## Project Status
+
+✅ **Phase 1: Database Builder** - Complete
+- JSON manifest parsing
+- Contextual markdown chunking  
+- Azure OpenAI and Ollama embeddings
+- Idempotent processing
+- chromem-go integration
+
+✅ **Phase 2: MCP Server** - Complete
+- MCP SDK integration
+- `fetch_advisory_for_task` tool
+- Embedded database support
+- Comprehensive usage instructions
+- Production ready
+
+✅ **Phase 3: Deployment** - Complete  
+- Self-contained binary with embedded database
+- GitHub Copilot integration
+- Installation and usage documentation
+- Development and deployment guides
 
 ## Roadmap
 
-- [x] Phase 1: Database Builder
-  - [x] JSON manifest parsing
-  - [x] Contextual markdown chunking
-  - [x] Azure OpenAI embeddings
-  - [x] Idempotent processing
-  - [x] chromem-go integration
-  - [x] Unit tests
-- [ ] Phase 2: MCP Server
-  - [ ] MCP SDK integration
-  - [ ] Advisory search tool
-  - [ ] Scope parameter support
-  - [ ] Embedded prompt instructions
-- [ ] Phase 3: Deployment
-  - [ ] Docker image
-  - [ ] Binary embedding
-  - [ ] GitHub Copilot integration
-  - [ ] Production guides
+Future enhancements:
+- [ ] Web UI for database management
+- [ ] Support for more embedding backends (OpenAI, Anthropic)
+- [ ] Multi-language support beyond Go
+- [ ] Prometheus metrics
+- [ ] Docker images
+- [ ] Caching layer for frequently queried tasks
+- [ ] Admin API for database management
