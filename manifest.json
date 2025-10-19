@@ -5,6 +5,7 @@
       "uri": "https://go.dev/doc/effective_go",
       "chunking_strategy": "h2_h3",
       "metadata": {
+        "title": "Effective Go",
         "language": "Go",
         "category": "best-practices",
         "version": "1.0",
@@ -16,6 +17,7 @@
       "uri": "https://go.dev/wiki/CodeReviewComments",
       "chunking_strategy": "h2",
       "metadata": {
+        "title": "Go Code Review Comments",
         "language": "Go",
         "category": "code-review",
         "version": "1.0",
@@ -27,6 +29,7 @@
       "uri": "https://go.dev/wiki/TestComments",
       "chunking_strategy": "h2",
       "metadata": {
+        "title": "Go Test Comments",
         "language": "Go",
         "category": "testing",
         "version": "1.0",
@@ -38,6 +41,7 @@
       "uri": "https://google.github.io/styleguide/go",
       "chunking_strategy": "h2_h3",
       "metadata": {
+        "title": "Google Go Style Guide",
         "language": "Go",
         "category": "style-guide",
         "version": "1.0",

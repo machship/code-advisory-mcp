@@ -168,25 +168,22 @@ func (h *Handler) fetchAdvisoryForTask(ctx context.Context, request mcp.CallTool
 	response := fmt.Sprintf("Found %d relevant coding advisories:\n\n", len(results))
 
 	for i, result := range results {
-		response += fmt.Sprintf("## Advisory %d (Relevance: %.1f%%)\n\n", i+1, result.Similarity*100)
+		response += fmt.Sprintf("# Advisory %d (Relevance: %.1f%%)\n\n", i+1, result.Similarity*100)
 
-		// Add metadata
+		// Add title from metadata (or fall back to source file)
+		if title, ok := result.Metadata["title"]; ok {
+			response += fmt.Sprintf("**Source:** %s\n\n", title)
+		} else if sourceFile, ok := result.Metadata["source_file"]; ok {
+			response += fmt.Sprintf("**Source:** %s\n\n", sourceFile)
+		}
+		
+		// Add URL
 		if url, ok := result.Metadata["url"]; ok {
 			response += fmt.Sprintf("**URL:** %s\n\n", url)
 		}
-		if sourceFile, ok := result.Metadata["source_file"]; ok {
-			response += fmt.Sprintf("**Source:** %s\n\n", sourceFile)
-		}
-		if h2, ok := result.Metadata["h2_heading"]; ok {
-			if h3, ok := result.Metadata["h3_heading"]; ok && h3 != "" {
-				response += fmt.Sprintf("**Section:** %s > %s\n\n", h2, h3)
-			} else {
-				response += fmt.Sprintf("**Section:** %s\n\n", h2)
-			}
-		}
 
-		// Add content
-		response += fmt.Sprintf("**Content:**\n\n%s\n\n", result.Content)
+		// Add content (headings are already in the content)
+		response += fmt.Sprintf("%s\n\n", result.Content)
 
 		if i < len(results)-1 {
 			response += "---\n\n"
