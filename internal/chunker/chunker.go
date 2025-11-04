@@ -19,6 +19,11 @@ const (
 	// StrategyH2H3 chunks by H2 context + H3 sections.
 	StrategyH2H3 ChunkingStrategy = "h2_h3"
 
+	// StrategyH2H3H4 chunks by H2 context + H3 sections, with H4 subsections when present.
+	// If an H3 has H4 children, creates chunks for each H4.
+	// If an H3 has no H4 children, creates one chunk for the entire H3.
+	StrategyH2H3H4 ChunkingStrategy = "h2_h3+h4"
+
 	// StrategyH2 chunks by H2 sections only.
 	StrategyH2 ChunkingStrategy = "h2"
 )
@@ -37,6 +42,7 @@ type Chunk struct {
 // ChunkDocument processes a markdown document and returns contextual chunks.
 // The strategy parameter determines the chunking behavior:
 // - h2_h3: H2 context + H3 sections (default)
+// - h2_h3+h4: H2 context + H3 sections, splitting H4s when present
 // - h2: Each H2 section becomes a chunk
 func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata map[string]string, strategy ChunkingStrategy) ([]Chunk, error) {
 	if strategy == "" {
@@ -46,6 +52,8 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 	switch strategy {
 	case StrategyH2H3:
 		return chunkH2H3(content, baseURL, sourcePath, metadata)
+	case StrategyH2H3H4:
+		return chunkH2H3H4(content, baseURL, sourcePath, metadata)
 	case StrategyH2:
 		return chunkH2(content, baseURL, sourcePath, metadata)
 	default:
@@ -460,6 +468,186 @@ func chunkH2(content []byte, baseURL string, sourcePath string, metadata map[str
 	}
 
 	return chunks, nil
+}
+
+// chunkH2H3H4 implements the hybrid H2 context + H3/H4 sections strategy.
+// If an H3 has H4 children, creates chunks for each H4 (with H2+H3 context).
+// If an H3 has no H4 children, creates one chunk for the entire H3 (with H2 context).
+func chunkH2H3H4(content []byte, baseURL string, sourcePath string, metadata map[string]string) ([]Chunk, error) {
+	md := goldmark.New()
+	doc := md.Parser().Parse(text.NewReader(content))
+
+	var chunks []Chunk
+	var currentH2 *ast.Heading
+	var currentH3 *ast.Heading
+	var h2Context strings.Builder
+	var h3Context strings.Builder
+
+	// First pass: identify which H3s have H4 children
+	h3HasH4 := make(map[ast.Node]bool)
+	err := ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		heading, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		if heading.Level == 3 {
+			currentH3 = heading
+		} else if heading.Level == 4 && currentH3 != nil {
+			h3HasH4[currentH3] = true
+		}
+
+		return ast.WalkContinue, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Second pass: create chunks
+	currentH2 = nil
+	currentH3 = nil
+
+	err = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+
+		heading, ok := n.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+
+		switch heading.Level {
+		case 1:
+			return ast.WalkSkipChildren, nil
+
+		case 2:
+			currentH2 = heading
+			h2Context.Reset()
+			h2Context.WriteString("## ")
+			h2Context.WriteString(extractText(heading, content))
+			h2Context.WriteString("\n\n")
+			h2Context.WriteString(extractH2Context(heading, content))
+
+		case 3:
+			if currentH2 == nil {
+				return ast.WalkSkipChildren, nil
+			}
+
+			currentH3 = heading
+			h3Text := extractText(heading, content)
+
+			// Check if this H3 has H4 children
+			if h3HasH4[heading] {
+				// Has H4s - prepare H3 context for H4 chunks
+				h3Context.Reset()
+				h2ContextStr := strings.TrimSpace(h2Context.String())
+				if h2ContextStr != "" {
+					h3Context.WriteString(h2ContextStr)
+					h3Context.WriteString("\n\n")
+				}
+				h3Context.WriteString("### ")
+				h3Context.WriteString(h3Text)
+				h3Context.WriteString("\n\n")
+				h3Context.WriteString(extractH3Context(heading, content))
+			} else {
+				// No H4s - create chunk for entire H3
+				h3Content := extractContentUntilNextHeading(heading, content)
+
+				var chunkContent strings.Builder
+				h2ContextStr := strings.TrimSpace(h2Context.String())
+				if h2ContextStr != "" {
+					chunkContent.WriteString(h2ContextStr)
+					chunkContent.WriteString("\n\n")
+				}
+				chunkContent.WriteString("### ")
+				chunkContent.WriteString(h3Text)
+				chunkContent.WriteString("\n\n")
+				chunkContent.WriteString(h3Content)
+
+				chunkText := strings.TrimSpace(chunkContent.String())
+				id := generateID(chunkText)
+				url := constructURL(baseURL, h3Text)
+
+				chunk := Chunk{
+					ID:         id,
+					Content:    chunkText,
+					URL:        url,
+					SourceFile: sourcePath,
+					H2Heading:  extractText(currentH2, content),
+					H3Heading:  h3Text,
+					Metadata:   copyMetadata(metadata),
+				}
+				chunks = append(chunks, chunk)
+			}
+
+		case 4:
+			if currentH3 == nil || !h3HasH4[currentH3] {
+				return ast.WalkSkipChildren, nil
+			}
+
+			// Create chunk with H2 context + H3 context + H4 section
+			h4Text := extractText(heading, content)
+			h4Content := extractContentUntilNextHeading(heading, content)
+
+			var chunkContent strings.Builder
+			h3ContextStr := strings.TrimSpace(h3Context.String())
+			if h3ContextStr != "" {
+				chunkContent.WriteString(h3ContextStr)
+				chunkContent.WriteString("\n\n")
+			}
+			chunkContent.WriteString("#### ")
+			chunkContent.WriteString(h4Text)
+			chunkContent.WriteString("\n\n")
+			chunkContent.WriteString(h4Content)
+
+			chunkText := strings.TrimSpace(chunkContent.String())
+			id := generateID(chunkText)
+			url := constructURL(baseURL, h4Text)
+
+			chunk := Chunk{
+				ID:         id,
+				Content:    chunkText,
+				URL:        url,
+				SourceFile: sourcePath,
+				H2Heading:  extractText(currentH2, content),
+				H3Heading:  extractText(currentH3, content),
+				Metadata:   copyMetadata(metadata),
+			}
+			chunks = append(chunks, chunk)
+		}
+
+		return ast.WalkSkipChildren, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return chunks, nil
+}
+
+// extractH3Context extracts content after H3 until first H4 or any other heading.
+func extractH3Context(heading *ast.Heading, source []byte) string {
+	var buf bytes.Buffer
+
+	node := heading.NextSibling()
+	for node != nil {
+		// Stop if we hit ANY heading (H4, H3, or H2)
+		if _, ok := node.(*ast.Heading); ok {
+			break
+		}
+
+		renderNodeToMarkdown(&buf, node, source)
+		node = node.NextSibling()
+	}
+
+	return strings.TrimSpace(buf.String())
 }
 
 // copyMetadata creates a copy of the metadata map.

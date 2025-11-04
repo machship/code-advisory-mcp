@@ -1,6 +1,7 @@
 package chunker
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -234,5 +235,197 @@ func TestCopyMetadata(t *testing.T) {
 	original["key3"] = "new"
 	if _, ok := copy["key3"]; ok {
 		t.Errorf("modifying original affected copy")
+	}
+}
+
+func TestChunkH2H3H4Strategy(t *testing.T) {
+	tests := map[string]struct {
+		content    string
+		baseURL    string
+		wantChunks int
+		checkFunc  func(*testing.T, []Chunk)
+	}{
+		"H3 without H4s creates single chunk": {
+			content: `# Document Title
+
+## Section One
+
+This is H2 intro content.
+
+### Subsection A
+
+This H3 has no H4s, so it should become one chunk.
+
+Some more content here.
+`,
+			baseURL:    "https://example.com/doc",
+			wantChunks: 1,
+			checkFunc: func(t *testing.T, chunks []Chunk) {
+				if chunks[0].H2Heading != "Section One" {
+					t.Errorf("H2Heading = %q, want %q", chunks[0].H2Heading, "Section One")
+				}
+				if chunks[0].H3Heading != "Subsection A" {
+					t.Errorf("H3Heading = %q, want %q", chunks[0].H3Heading, "Subsection A")
+				}
+				// Should contain H2 context
+				if chunks[0].Content[:len("## Section One")] != "## Section One" {
+					t.Errorf("Content should start with H2 heading")
+				}
+			},
+		},
+		"H3 with H4s creates chunk per H4": {
+			content: `# Document Title
+
+## Section One
+
+This is H2 intro content.
+
+### Subsection B
+
+This H3 has H4 children, so each H4 becomes a chunk.
+
+#### First Detail
+
+Content for first detail.
+
+#### Second Detail
+
+Content for second detail.
+`,
+			baseURL:    "https://example.com/doc",
+			wantChunks: 2,
+			checkFunc: func(t *testing.T, chunks []Chunk) {
+				// First H4 chunk
+				if chunks[0].H2Heading != "Section One" {
+					t.Errorf("chunks[0] H2Heading = %q, want %q", chunks[0].H2Heading, "Section One")
+				}
+				if chunks[0].H3Heading != "Subsection B" {
+					t.Errorf("chunks[0] H3Heading = %q, want %q", chunks[0].H3Heading, "Subsection B")
+				}
+				// Should contain H2 + H3 context
+				if chunks[0].Content[:len("## Section One")] != "## Section One" {
+					t.Errorf("chunks[0] should start with H2 heading")
+				}
+
+				// Second H4 chunk
+				if chunks[1].H2Heading != "Section One" {
+					t.Errorf("chunks[1] H2Heading = %q, want %q", chunks[1].H2Heading, "Section One")
+				}
+				if chunks[1].H3Heading != "Subsection B" {
+					t.Errorf("chunks[1] H3Heading = %q, want %q", chunks[1].H3Heading, "Subsection B")
+				}
+			},
+		},
+		"Mixed H3s with and without H4s": {
+			content: `# Document Title
+
+## Section One
+
+This is H2 intro content.
+
+### Subsection A
+
+This H3 has no H4s, so it should become one chunk.
+
+Some more content here.
+
+### Subsection B
+
+This H3 has H4 children, so each H4 becomes a chunk.
+
+#### First Detail
+
+Content for first detail.
+
+#### Second Detail
+
+Content for second detail.
+
+## Section Two
+
+Another H2 section.
+
+### Simple Section
+
+No H4s here either.
+`,
+			baseURL:    "https://example.com/doc",
+			wantChunks: 4, // 1 from Subsection A + 2 H4s from Subsection B + 1 from Simple Section
+			checkFunc: func(t *testing.T, chunks []Chunk) {
+				// Verify we got the right mix
+				foundSubsectionA := false
+				foundFirstDetail := false
+				foundSecondDetail := false
+				foundSimpleSection := false
+
+				for _, chunk := range chunks {
+					if chunk.H3Heading == "Subsection A" {
+						foundSubsectionA = true
+						// Should be H3-level chunk (no H4 in heading structure)
+						if chunk.Content[:len("## Section One")] != "## Section One" {
+							t.Errorf("Subsection A chunk should start with H2 context")
+						}
+					}
+					if chunk.H3Heading == "Subsection B" {
+						// These are H4-level chunks
+						if chunk.Content[:len("## Section One")] != "## Section One" {
+							t.Errorf("Subsection B H4 chunk should start with H2 context")
+						}
+						// Check which H4 this is by looking for the text
+						if strings.Contains(chunk.Content, "First Detail") {
+							foundFirstDetail = true
+						}
+						if strings.Contains(chunk.Content, "Second Detail") {
+							foundSecondDetail = true
+						}
+					}
+					if chunk.H3Heading == "Simple Section" {
+						foundSimpleSection = true
+					}
+				}
+
+				if !foundSubsectionA {
+					t.Errorf("Missing chunk for Subsection A (H3 without H4s)")
+				}
+				if !foundFirstDetail {
+					t.Errorf("Missing chunk for First Detail H4")
+				}
+				if !foundSecondDetail {
+					t.Errorf("Missing chunk for Second Detail H4")
+				}
+				if !foundSimpleSection {
+					t.Errorf("Missing chunk for Simple Section")
+				}
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			chunks, err := ChunkDocument([]byte(tc.content), tc.baseURL, "/test.md", nil, StrategyH2H3H4)
+			if err != nil {
+				t.Fatalf("ChunkDocument failed: %v", err)
+			}
+
+			if len(chunks) != tc.wantChunks {
+				t.Errorf("got %d chunks, want %d", len(chunks), tc.wantChunks)
+				for i, chunk := range chunks {
+					t.Logf("Chunk %d: H2=%q H3=%q", i, chunk.H2Heading, chunk.H3Heading)
+				}
+			}
+
+			if tc.checkFunc != nil {
+				tc.checkFunc(t, chunks)
+			}
+
+			// Verify all chunks have unique IDs
+			ids := make(map[string]bool)
+			for _, chunk := range chunks {
+				if ids[chunk.ID] {
+					t.Errorf("duplicate chunk ID: %s", chunk.ID)
+				}
+				ids[chunk.ID] = true
+			}
+		})
 	}
 }

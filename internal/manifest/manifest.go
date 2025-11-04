@@ -12,6 +12,9 @@ const (
 	// ChunkingStrategyH2H3 chunks by H2 context + H3 sections (default).
 	ChunkingStrategyH2H3 ChunkingStrategy = "h2_h3"
 
+	// ChunkingStrategyH2H3H4 chunks by H2 context + H3 sections, with H4 subsections when present.
+	ChunkingStrategyH2H3H4 ChunkingStrategy = "h2_h3+h4"
+
 	// ChunkingStrategyH2 chunks by H2 sections only.
 	ChunkingStrategyH2 ChunkingStrategy = "h2"
 )
