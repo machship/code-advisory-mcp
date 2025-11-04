@@ -12,6 +12,14 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
+var (
+	// htmlCommentRegex matches HTML comments: <!-- ... -->
+	htmlCommentRegex = regexp.MustCompile(`<!--[\s\S]*?-->`)
+
+	// htmlAnchorRegex matches single-line anchor tags: <a id="xyz"></a>
+	htmlAnchorRegex = regexp.MustCompile(`<a\s+id="[^"]*"\s*></a>`)
+)
+
 // ChunkingStrategy defines how to chunk a markdown document.
 type ChunkingStrategy string
 
@@ -39,6 +47,17 @@ type Chunk struct {
 	Metadata   map[string]string
 }
 
+// stripHTMLArtifacts removes HTML comments and anchor tags from markdown content.
+func stripHTMLArtifacts(content []byte) []byte {
+	// Remove HTML comments
+	content = htmlCommentRegex.ReplaceAll(content, []byte{})
+
+	// Remove anchor tags
+	content = htmlAnchorRegex.ReplaceAll(content, []byte{})
+
+	return content
+}
+
 // ChunkDocument processes a markdown document and returns contextual chunks.
 // The strategy parameter determines the chunking behavior:
 // - h2_h3: H2 context + H3 sections (default)
@@ -48,6 +67,9 @@ func ChunkDocument(content []byte, baseURL string, sourcePath string, metadata m
 	if strategy == "" {
 		strategy = StrategyH2H3
 	}
+
+	// Strip HTML artifacts before chunking
+	content = stripHTMLArtifacts(content)
 
 	switch strategy {
 	case StrategyH2H3:

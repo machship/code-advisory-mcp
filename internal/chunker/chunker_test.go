@@ -238,6 +238,135 @@ func TestCopyMetadata(t *testing.T) {
 	}
 }
 
+func TestStripHTMLArtifacts(t *testing.T) {
+	tests := map[string]struct {
+		input string
+		want  string
+	}{
+		"single line comment": {
+			input: "Text before <!-- comment --> text after",
+			want:  "Text before  text after",
+		},
+		"multi-line comment": {
+			input: `Text before
+<!-- 
+multi-line
+comment
+-->
+text after`,
+			want: `Text before
+
+text after`,
+		},
+		"anchor tag": {
+			input: `<a id="test"></a>
+
+## Heading`,
+			want: `
+
+## Heading`,
+		},
+		"multiple anchors": {
+			input: `<a id="first"></a>
+Content
+<a id="second"></a>
+More content`,
+			want: `
+Content
+
+More content`,
+		},
+		"mixed HTML artifacts": {
+			input: `<!-- comment -->
+<a id="anchor"></a>
+
+## Section
+
+Some text <!-- inline comment --> here.
+
+<a id="another"></a>
+
+More text`,
+			want: `
+
+
+## Section
+
+Some text  here.
+
+
+
+More text`,
+		},
+		"no HTML artifacts": {
+			input: "Just plain markdown",
+			want:  "Just plain markdown",
+		},
+		"anchor with attributes spacing": {
+			input: `<a id="test-anchor"></a>`,
+			want:  ``,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := string(stripHTMLArtifacts([]byte(tc.input)))
+			if got != tc.want {
+				t.Errorf("stripHTMLArtifacts() mismatch:\nInput:\n%s\n\nGot:\n%s\n\nWant:\n%s", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestChunkDocumentStripsHTML(t *testing.T) {
+	content := `# Document Title
+
+<!-- This is a comment -->
+
+<a id="section-one"></a>
+
+## Section One
+
+This section has HTML artifacts.
+
+<a id="subsection"></a>
+
+### Subsection
+
+<!-- Another comment -->
+
+Content here.
+`
+
+	chunks, err := ChunkDocument([]byte(content), "https://example.com", "/test.md", nil, StrategyH2H3)
+	if err != nil {
+		t.Fatalf("ChunkDocument failed: %v", err)
+	}
+
+	if len(chunks) != 1 {
+		t.Fatalf("Expected 1 chunk, got %d", len(chunks))
+	}
+
+	// Verify HTML artifacts are not in the chunk content
+	if strings.Contains(chunks[0].Content, "<!--") {
+		t.Errorf("Chunk contains HTML comment")
+	}
+	if strings.Contains(chunks[0].Content, "<a id=") {
+		t.Errorf("Chunk contains anchor tag")
+	}
+	if strings.Contains(chunks[0].Content, "</a>") {
+		t.Errorf("Chunk contains closing anchor tag")
+	}
+
+	// Verify actual content is still present
+	if !strings.Contains(chunks[0].Content, "Section One") {
+		t.Errorf("Chunk missing expected content")
+	}
+	if !strings.Contains(chunks[0].Content, "Content here.") {
+		t.Errorf("Chunk missing expected content")
+	}
+}
+
 func TestChunkH2H3H4Strategy(t *testing.T) {
 	tests := map[string]struct {
 		content    string
