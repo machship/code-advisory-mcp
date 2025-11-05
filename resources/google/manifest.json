@@ -1,0 +1,64 @@
+{
+  "documents": [
+    {
+      "path": "resources/Effective-Go.md",
+      "uri": "https://go.dev/doc/effective_go",
+      "chunking_strategy": "h2_h3",
+      "metadata": {
+        "title": "Effective Go",
+        "language": "Go",
+        "category": "best-practices",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/CodeReviewComments.md",
+      "uri": "https://go.dev/wiki/CodeReviewComments",
+      "chunking_strategy": "h2",
+      "metadata": {
+        "title": "Go Code Review Comments",
+        "language": "Go",
+        "category": "code-review",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/TestComments.md",
+      "uri": "https://go.dev/wiki/TestComments",
+      "chunking_strategy": "h2",
+      "metadata": {
+        "title": "Go Test Comments",
+        "language": "Go",
+        "category": "testing",
+        "version": "1.0",
+        "author": "Go Team"
+      }
+    },
+    {
+      "path": "resources/google/decisions.md",
+      "uri": "https://google.github.io/styleguide/go/decisions",
+      "chunking_strategy": "h2_h3",
+      "metadata": {
+        "title": "Go Style Decisions",
+        "language": "Go",
+        "category": "decisions",
+        "version": "1.0",
+        "author": "Google"
+      }
+    },
+    {
+      "path": "resources/google/best-practices.md",
+      "uri": "https://google.github.io/styleguide/go/best-practices",
+      "chunking_strategy": "h2_h3+h4",
+      "metadata": {
+        "title": "Go Style Decisions",
+        "language": "Go",
+        "category": "best-practices",
+        "version": "1.0",
+        "author": "Google"
+      }
+    }
+  ]
+}
