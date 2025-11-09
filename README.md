@@ -415,6 +415,10 @@ mask check
 
 ## Architecture
 
+For a detailed system architecture with diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+**Quick overview:**
+
 ```
 cmd/
   server/         # MCP server (main binary)
