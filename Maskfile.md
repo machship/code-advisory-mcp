@@ -21,7 +21,7 @@ brew install mprocs
 > Build code-advisory-mcp service
 
 ```bash
-go build -ldflags "-X 'main.version=$(git describe --always --tags --dirty="-$USER")'" -o bin/code-advisory-mcp .
+go build -ldflags "-X 'main.version=$(git describe --always --tags --dirty="-$USER")'" -o bin/code-advisory-mcp ./cmd/server
 ```
 
 ### build image

@@ -23,6 +23,8 @@ var embeddedDBBytes []byte
 //go:embed embedded/INSTRUCTIONS.md
 var embeddedInstructions string
 
+var version = "0.0.0"
+
 type config struct {
 	dbPath            string
 	backend           string
@@ -31,12 +33,18 @@ type config struct {
 	ollamaBaseURL     string
 	model             string
 	useEmbedded       bool
+	version           bool
 	printInstructions bool
 	queryLogDir       string
 }
 
 func main() {
 	cfg := parseFlags()
+
+	if cfg.version {
+		printVersion()
+		return
+	}
 
 	if cfg.printInstructions {
 		printPromptInstructions()
@@ -58,6 +66,7 @@ func parseFlags() config {
 	flag.StringVar(&cfg.ollamaBaseURL, "ollama-url", getEnv("OLLAMA_BASE_URL", "http://localhost:11434/api"), "Ollama base URL (for ollama backend)")
 	flag.StringVar(&cfg.model, "model", getEnv("EMBEDDING_MODEL", "nomic-embed-text"), "Embedding model name")
 	flag.StringVar(&cfg.queryLogDir, "query-log-dir", getEnv("QUERY_LOG_DIR", ""), "Directory for query log files (empty = no logging)")
+	flag.BoolVar(&cfg.version, "version", false, "Print version and exit")
 	flag.BoolVar(&cfg.printInstructions, "print-instructions", false, "Print prompt instructions and exit")
 
 	flag.Parse()
@@ -211,6 +220,10 @@ func run(cfg config) error {
 	}
 
 	return nil
+}
+
+func printVersion() {
+	fmt.Println(version)
 }
 
 func printPromptInstructions() {
