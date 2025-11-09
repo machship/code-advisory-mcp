@@ -32,6 +32,15 @@ go build -ldflags "-X 'main.version=$(git describe --always --tags --dirty="-$US
 docker build -f Dockerfile -t code-advisory-mcp .
 ```
 
+### build db [manifest]
+
+> Build build and export database.
+
+```bash
+go run ./cmd/builder -manifest ${manifest:-manifest.json} -backend ollama -model nomic-embed-text --output advisory.db
+go run ./cmd/export -input advisory.db -output cmd/server/embedded/advisory.gob
+```
+
 ## test
 
 > Run all tests
