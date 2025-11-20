@@ -8,7 +8,7 @@ import (
 	"log"
 	"time"
 
-	"github/machship/code-advisory-mcp/internal/embedder"
+	"github.com/machship/code-advisory-mcp/internal/embedder"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"

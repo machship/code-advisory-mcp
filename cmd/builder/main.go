@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github/machship/code-advisory-mcp/internal/chunker"
-	"github/machship/code-advisory-mcp/internal/database"
-	"github/machship/code-advisory-mcp/internal/embedder"
-	"github/machship/code-advisory-mcp/internal/manifest"
+	"github.com/machship/code-advisory-mcp/internal/chunker"
+	"github.com/machship/code-advisory-mcp/internal/database"
+	"github.com/machship/code-advisory-mcp/internal/embedder"
+	"github.com/machship/code-advisory-mcp/internal/manifest"
 )
 
 type config struct {

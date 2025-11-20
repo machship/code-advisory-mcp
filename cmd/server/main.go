@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github/machship/code-advisory-mcp/internal/embedder"
-	"github/machship/code-advisory-mcp/internal/mcp"
+	"github.com/machship/code-advisory-mcp/internal/embedder"
+	"github.com/machship/code-advisory-mcp/internal/mcp"
 
 	mcpServer "github.com/mark3labs/mcp-go/server"
 	"github.com/philippgille/chromem-go"

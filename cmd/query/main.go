@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github/machship/code-advisory-mcp/internal/embedder"
+	"github.com/machship/code-advisory-mcp/internal/embedder"
 
 	"github.com/philippgille/chromem-go"
 )
