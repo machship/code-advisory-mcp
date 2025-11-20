@@ -1,4 +1,4 @@
-module github/machship/code-advisory-mcp
+module github.com/machship/code-advisory-mcp
 
 go 1.25.1
 
