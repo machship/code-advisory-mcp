@@ -1,0 +1,21 @@
+# code-advisory-mcp (machship/code-advisory-mcp). See README.md in this folder.
+# Not deployed anywhere: developers build the binary and run it locally as a stdio MCP server. No secret values.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: code-advisory-mcp
+  description: Local stdio MCP server that answers fetch_advisory_for_task with the closest Go coding-standard sections (Effective Go, Code Review Comments, Test Comments, Google Go style) from an embedded vector database
+  annotations:
+    github.com/project-slug: machship/code-advisory-mcp
+spec:
+  type: cli
+  owner: group:uplift
+  lifecycle: in-development
+  machship:
+    lastReviewed: 2026-11-14
+    supportNote: >-
+      GitHub project-type Dev Only, owner-team uplift. Runs only on developer laptops, started by an MCP client
+      (GitHub Copilot, Claude Code, Claude Desktop) over stdio. No image, no CI, no k8s or cloud deployment found.
+      Embeddings for each query come from a local Ollama (default, nomic-embed-text) or Azure OpenAI configured
+      by the developer (AZURE_OPENAI_ENDPOINT / AZURE_OPENAI_KEY env vars). TODO(confirm) whether a shared
+      MachShip Azure OpenAI deployment is used; none is referenced in the repo.
